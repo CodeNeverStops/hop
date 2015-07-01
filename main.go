@@ -2,18 +2,20 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
+	"fmt"
 	"gopkg.in/redis.v3"
 	"io/ioutil"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	redisKey   string = "hoff:postback:v1"
-	convTpl    string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
-	goalTpl    string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
-	retryTimes int    = 5
+	convTpl string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
+	goalTpl string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
 )
 
 type Poster interface {
@@ -42,18 +44,37 @@ func (this *Goal) Url() string {
 	return s
 }
 
+type Flags struct {
+	RedisHost     string
+	RedisPort     uint16
+	RedisDB       int64
+	RedisPWD      string
+	RedisKey      string
+	RetryTimes    uint8
+	RetryInterval uint16
+	PoolSize      uint16
+	LogBufferSize uint32
+}
+
 var (
-	data   []string
 	err    error
 	poster Poster
+	flags  *Flags
 )
 
 func main() {
+	parseFlags()
+	// start log goroutine
+	logStart()
+
+	var data []string
 	client := NewClient()
-	pool := make(chan bool, 10)
+	pool := make(chan bool, flags.PoolSize)
+
 	for {
 		pool <- true
-		if data, err = client.BLPop(0, redisKey).Result(); err != nil {
+		if data, err = client.BLPop(0, flags.RedisKey).Result(); err != nil {
+			Log("redis blpop failed")
 			continue
 		}
 		tmpData := data[1]
@@ -61,12 +82,14 @@ func main() {
 		if strings.Index(tmpData, "\"goal_id\":") > -1 {
 			goal := &Goal{}
 			if decodeErr := json.Unmarshal(tmpByte, &goal); decodeErr != nil {
+				Log("decode goal failed")
 				continue
 			}
 			poster = goal
 		} else {
 			conversion := &Conversion{}
 			if decodeErr := json.Unmarshal(tmpByte, &conversion); decodeErr != nil {
+				Log("decode conversion failed")
 				continue
 			}
 			poster = conversion
@@ -80,37 +103,69 @@ func main() {
 	}
 }
 
-//func NewClient(host string, port uint16, password string, db uint8) *redis.Client {
 func NewClient() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     "127.0.0.1:6379",
-		Password: "",
-		DB:       0,
+		Addr:     flags.RedisHost + ":" + strconv.FormatUint(uint64(flags.RedisPort), 10),
+		Password: flags.RedisPWD,
+		DB:       flags.RedisDB,
 	})
-	pong, err := client.Ping().Result()
-	Log(LevelInfo, pong, err)
+	if _, err := client.Ping().Result(); err != nil {
+		panic("failed to connect redis server")
+	}
 	return client
 }
 
-func postback(url string) {
-	times := 0
-	ret := sendRequest(url, times)
-	if ret {
-		return
+func parseFlags() {
+	redisHost := flag.String("redis-host", "127.0.0.1", "redis host")
+	redisPort := flag.Uint("redis-port", 6379, "redis port")
+	redisDB := flag.Uint("redis-db", 0, "redis db")
+	redisPWD := flag.String("redis-pwd", "", "redis password")
+	redisKey := flag.String("redis-key", "", "redis key")
+	retryTimes := flag.Uint("t", 5, "retry times")
+	retryInterval := flag.Uint("i", 10, "retry interval, unit: Minute")
+	poolSize := flag.Uint("n", 1000, "max pool size")
+	logBufferSize := flag.Uint("log-buffer", 1000, "log buffer size")
+
+	flag.Parse()
+
+	if *redisKey == "" {
+		fmt.Println("please specify the redis key")
+		os.Exit(1)
 	}
-	c := time.Tick(5 * time.Second)
-	//c := time.Tick(10 * time.Minute)
-	for now := range c {
-		if times >= retryTimes {
+
+	flags = &Flags{
+		RedisHost:     *redisHost,
+		RedisPort:     uint16(*redisPort),
+		RedisDB:       int64(*redisDB),
+		RedisPWD:      *redisPWD,
+		RedisKey:      *redisKey,
+		RetryTimes:    uint8(*retryTimes),
+		RetryInterval: uint16(*retryInterval),
+		PoolSize:      uint16(*poolSize),
+		LogBufferSize: uint32(*logBufferSize),
+	}
+	fmt.Println(flags)
+}
+
+func postback(url string) {
+	var (
+		times uint8 = 0
+		ret   bool
+	)
+	c := time.Tick(time.Duration(flags.RetryInterval) * time.Minute)
+	for range c {
+		if times >= flags.RetryTimes {
 			break
 		}
 		times++
-		Logf(LevelInfo, "%s,%d", now, times)
-		sendRequest(url, times)
+		ret = sendRequest(url, times)
+		if ret {
+			break
+		}
 	}
 }
 
-func sendRequest(url string, times int) bool {
+func sendRequest(url string, times uint8) bool {
 	Logf(LevelInfo, "url:%s,times:%d", url, times)
 	resp, err := http.Get(url)
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"os"
 )
 
 const (
@@ -20,18 +21,18 @@ type logData struct {
 }
 
 var (
-	channel chan *logData
-	buf     bytes.Buffer
-	logger  *log.Logger
+	logChannel chan *logData
+	buf        bytes.Buffer
+	logger     *log.Logger
 )
 
-func init() {
-	channel = make(chan *logData, 1000)
+func logStart() {
+	logChannel = make(chan *logData, flags.LogBufferSize)
 	logger = log.New(&buf, "", log.LstdFlags)
 	go func() {
 		for {
 			select {
-			case aLog := <-channel:
+			case aLog := <-logChannel:
 				writeLog(aLog)
 			}
 		}
@@ -41,16 +42,20 @@ func init() {
 func Logf(level string, format string, a ...interface{}) {
 	message := fmt.Sprintf(format, a...)
 	aLog := &logData{message, level}
-	channel <- aLog
+	logChannel <- aLog
 }
 
 func Log(level string, a ...interface{}) {
 	message := fmt.Sprint(a...)
 	aLog := &logData{message, level}
-	channel <- aLog
+	logChannel <- aLog
 }
 
 func writeLog(aLog *logData) {
 	logger.Printf("[%s] %s\n", aLog.level, aLog.message)
+	if aLog.level == LevelError {
+		defer func() { os.Exit(1) }()
+		logger.Printf("SHUTDOWN\n")
+	}
 	log.Print(&buf)
 }
