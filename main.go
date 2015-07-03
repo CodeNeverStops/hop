@@ -13,11 +13,6 @@ import (
 	"time"
 )
 
-const (
-	convTpl string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
-	goalTpl string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
-)
-
 type Poster interface {
 	Url() string
 }
@@ -28,6 +23,7 @@ type Conversion struct {
 }
 
 func (this *Conversion) Url() string {
+	const convTpl string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
 	s := strings.Replace(convTpl, "[trans_id]", this.TransId, 1)
 	s = strings.Replace(s, "[user_id]", this.UserId, 1)
 	return s
@@ -39,6 +35,7 @@ type Goal struct {
 }
 
 func (this *Goal) Url() string {
+	const goalTpl string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
 	s := strings.Replace(goalTpl, "[trans_id]", this.TransId, 1)
 	s = strings.Replace(s, "[goal_id]", this.GoalId, 1)
 	return s
@@ -53,7 +50,8 @@ type Flags struct {
 	RetryTimes    uint8
 	RetryInterval uint16
 	PoolSize      uint16
-	LogBufferSize uint32
+	LogQueueSize  uint32
+	LogBufferSize uint16
 }
 
 var (
@@ -64,7 +62,6 @@ var (
 
 func main() {
 	parseFlags()
-	// start log goroutine
 	logStart()
 
 	var data []string
@@ -94,7 +91,6 @@ func main() {
 			}
 			poster = conversion
 		}
-		Log(LevelInfo, poster)
 		go func() {
 			defer func() { <-pool }()
 			url := poster.Url()
@@ -122,9 +118,10 @@ func parseFlags() {
 	redisPWD := flag.String("redis-pwd", "", "redis password")
 	redisKey := flag.String("redis-key", "", "redis key")
 	retryTimes := flag.Uint("t", 5, "retry times")
-	retryInterval := flag.Uint("i", 10, "retry interval, unit: Minute")
+	retryInterval := flag.Uint("i", 10, "retry interval, unit: Second")
 	poolSize := flag.Uint("n", 1000, "max pool size")
-	logBufferSize := flag.Uint("log-buffer", 1000, "log buffer size")
+	logQueueSize := flag.Uint("log-queue", 1000, "log queue size")
+	logBufferSize := flag.Uint("log-buffer", 2, "log buffer size")
 
 	flag.Parse()
 
@@ -142,7 +139,8 @@ func parseFlags() {
 		RetryTimes:    uint8(*retryTimes),
 		RetryInterval: uint16(*retryInterval),
 		PoolSize:      uint16(*poolSize),
-		LogBufferSize: uint32(*logBufferSize),
+		LogQueueSize:  uint32(*logQueueSize),
+		LogBufferSize: uint16(*logBufferSize),
 	}
 	fmt.Println(flags)
 }
@@ -152,9 +150,14 @@ func postback(url string) {
 		times uint8 = 0
 		ret   bool
 	)
-	c := time.Tick(time.Duration(flags.RetryInterval) * time.Minute)
+	ret = sendRequest(url, times)
+	if ret {
+		return
+	}
+	c := time.Tick(time.Duration(flags.RetryInterval) * time.Second)
 	for range c {
 		if times >= flags.RetryTimes {
+			Logf(LevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
 			break
 		}
 		times++
@@ -169,17 +172,19 @@ func sendRequest(url string, times uint8) bool {
 	Logf(LevelInfo, "url:%s,times:%d", url, times)
 	resp, err := http.Get(url)
 	if err != nil {
+		Logf(LevelWarning, "failed to send request. detail: url=%s,times=%d", url, times)
 		return false
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
+		Logf(LevelWarning, "failed to read response. detail: url=%s,times=%d", url, times)
 		return false
 	}
 	bodyStr := string(body)
-	Log(LevelInfo, bodyStr)
 	if strings.Index(bodyStr, "success=true;") > -1 {
 		return true
 	}
+	Logf(LevelWarning, "failed to send request2. detail: response=%s,url=%s,times=%d", bodyStr, url, times)
 	return false
 }

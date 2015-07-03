@@ -21,13 +21,14 @@ type logData struct {
 }
 
 var (
-	logChannel chan *logData
-	buf        bytes.Buffer
-	logger     *log.Logger
+	logChannel     chan *logData
+	buf            bytes.Buffer
+	logger         *log.Logger
+	currBufferSize uint16 = 0
 )
 
 func logStart() {
-	logChannel = make(chan *logData, flags.LogBufferSize)
+	logChannel = make(chan *logData, flags.LogQueueSize)
 	logger = log.New(&buf, "", log.LstdFlags)
 	go func() {
 		for {
@@ -57,5 +58,10 @@ func writeLog(aLog *logData) {
 		defer func() { os.Exit(1) }()
 		logger.Printf("SHUTDOWN\n")
 	}
-	log.Print(&buf)
+	currBufferSize++
+	if currBufferSize >= flags.LogBufferSize {
+		log.Print(&buf)
+		buf.Reset()
+		currBufferSize = 0
+	}
 }
