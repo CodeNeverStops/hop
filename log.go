@@ -31,6 +31,7 @@ func logStart() {
 	logChannel = make(chan *logData, flags.LogQueueSize)
 	logger = log.New(&buf, "", log.LstdFlags)
 	go func() {
+		logChan <- true
 		for {
 			select {
 			case aLog := <-logChannel:

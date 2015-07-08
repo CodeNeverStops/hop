@@ -55,14 +55,20 @@ type Flags struct {
 }
 
 var (
-	err    error
-	poster Poster
-	flags  *Flags
+	err     error
+	poster  Poster
+	flags   *Flags
+	logChan chan bool
 )
 
 func main() {
 	parseFlags()
+
+	logChan = make(chan bool)
 	logStart()
+	<-logChan
+
+	adminStart()
 
 	var data []string
 	client := NewClient()
