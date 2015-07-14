@@ -28,10 +28,9 @@ var (
 )
 
 func logStart() {
-	logChannel = make(chan *logData, flags.LogQueueSize)
+	logChannel = make(chan *logData, conf.LogQueueSize)
 	logger = log.New(&buf, "", log.LstdFlags)
 	go func() {
-		logChan <- true
 		for {
 			select {
 			case aLog := <-logChannel:
@@ -60,7 +59,7 @@ func writeLog(aLog *logData) {
 		logger.Printf("SHUTDOWN\n")
 	}
 	currBufferSize++
-	if currBufferSize >= flags.LogBufferSize {
+	if currBufferSize >= conf.LogBufferSize {
 		log.Print(&buf)
 		buf.Reset()
 		currBufferSize = 0

@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+const (
+	Version = "0.1.0"
+)
+
 type Poster interface {
 	Url() string
 }
@@ -42,41 +46,37 @@ func (this *Goal) Url() string {
 }
 
 type Flags struct {
-	RedisHost     string
-	RedisPort     uint16
-	RedisDB       int64
-	RedisPWD      string
-	RedisKey      string
-	RetryTimes    uint8
-	RetryInterval uint16
-	PoolSize      uint16
-	LogQueueSize  uint32
-	LogBufferSize uint16
+	RedisHost      string
+	RedisPort      uint16
+	RedisDB        int64
+	RedisPWD       string
+	RedisKey       string
+	RetryTimes     uint8
+	RetryInterval  uint16
+	WorkerPoolSize uint16
+	LogQueueSize   uint32
+	LogBufferSize  uint16
 }
 
 var (
-	err     error
-	poster  Poster
-	flags   *Flags
-	logChan chan bool
+	err    error
+	poster Poster
+	conf   *Flags
 )
 
 func main() {
 	parseFlags()
-
-	logChan = make(chan bool)
 	logStart()
-	<-logChan
-
+	statsStart()
 	adminStart()
 
 	var data []string
 	client := NewClient()
-	pool := make(chan bool, flags.PoolSize)
+	pool := make(chan bool, conf.WorkerPoolSize)
 
 	for {
 		pool <- true
-		if data, err = client.BLPop(0, flags.RedisKey).Result(); err != nil {
+		if data, err = client.BLPop(0, conf.RedisKey).Result(); err != nil {
 			Log("redis blpop failed")
 			continue
 		}
@@ -98,7 +98,11 @@ func main() {
 			poster = conversion
 		}
 		go func() {
-			defer func() { <-pool }()
+			SendStats(StatsCmdNewWorker)
+			defer func() {
+				<-pool
+				SendStats(StatsCmdCloseWorker)
+			}()
 			url := poster.Url()
 			postback(url)
 		}()
@@ -107,9 +111,9 @@ func main() {
 
 func NewClient() *redis.Client {
 	client := redis.NewClient(&redis.Options{
-		Addr:     flags.RedisHost + ":" + strconv.FormatUint(uint64(flags.RedisPort), 10),
-		Password: flags.RedisPWD,
-		DB:       flags.RedisDB,
+		Addr:     conf.RedisHost + ":" + strconv.FormatUint(uint64(conf.RedisPort), 10),
+		Password: conf.RedisPWD,
+		DB:       conf.RedisDB,
 	})
 	if _, err := client.Ping().Result(); err != nil {
 		panic("failed to connect redis server")
@@ -125,7 +129,7 @@ func parseFlags() {
 	redisKey := flag.String("redis-key", "", "redis key")
 	retryTimes := flag.Uint("t", 5, "retry times")
 	retryInterval := flag.Uint("i", 10, "retry interval, unit: Second")
-	poolSize := flag.Uint("n", 1000, "max pool size")
+	workerPoolSize := flag.Uint("n", 1000, "max pool size of workers")
 	logQueueSize := flag.Uint("log-queue", 1000, "log queue size")
 	logBufferSize := flag.Uint("log-buffer", 2, "log buffer size")
 
@@ -136,19 +140,19 @@ func parseFlags() {
 		os.Exit(1)
 	}
 
-	flags = &Flags{
-		RedisHost:     *redisHost,
-		RedisPort:     uint16(*redisPort),
-		RedisDB:       int64(*redisDB),
-		RedisPWD:      *redisPWD,
-		RedisKey:      *redisKey,
-		RetryTimes:    uint8(*retryTimes),
-		RetryInterval: uint16(*retryInterval),
-		PoolSize:      uint16(*poolSize),
-		LogQueueSize:  uint32(*logQueueSize),
-		LogBufferSize: uint16(*logBufferSize),
+	conf = &Flags{
+		RedisHost:      *redisHost,
+		RedisPort:      uint16(*redisPort),
+		RedisDB:        int64(*redisDB),
+		RedisPWD:       *redisPWD,
+		RedisKey:       *redisKey,
+		RetryTimes:     uint8(*retryTimes),
+		RetryInterval:  uint16(*retryInterval),
+		WorkerPoolSize: uint16(*workerPoolSize),
+		LogQueueSize:   uint32(*logQueueSize),
+		LogBufferSize:  uint16(*logBufferSize),
 	}
-	fmt.Println(flags)
+	fmt.Println(conf)
 }
 
 func postback(url string) {
@@ -158,17 +162,20 @@ func postback(url string) {
 	)
 	ret = sendRequest(url, times)
 	if ret {
+		SendStats(StatsCmdSuccTask)
 		return
 	}
-	c := time.Tick(time.Duration(flags.RetryInterval) * time.Second)
+	c := time.Tick(time.Duration(conf.RetryInterval) * time.Second)
 	for range c {
-		if times >= flags.RetryTimes {
+		if times >= conf.RetryTimes {
 			Logf(LevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
+			SendStats(StatsCmdFailedTask)
 			break
 		}
 		times++
 		ret = sendRequest(url, times)
 		if ret {
+			SendStats(StatsCmdSuccTask)
 			break
 		}
 	}

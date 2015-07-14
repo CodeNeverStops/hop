@@ -44,7 +44,7 @@ func handleCommand(c net.Conn) {
 			}
 			break
 		case "stats":
-			outBuf := stats()
+			outBuf := ServerStatsReport()
 			fmt.Fprintln(c, outBuf)
 		default:
 			fmt.Fprintln(c, "no known command")
@@ -56,6 +56,6 @@ func shutdown() (string, error) {
 	return "shutdown successfully", nil
 }
 
-func stats() string {
-	return "print stats"
+func ServerStatsReport() string {
+	return StatsReport()
 }
