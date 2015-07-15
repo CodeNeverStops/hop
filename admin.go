@@ -3,21 +3,21 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
 	"net"
+	"strconv"
 )
 
 func adminStart() {
 	go func() {
-		l, err := net.Listen("tcp", ":2000")
+		l, err := net.Listen("tcp", ":"+strconv.Itoa(int(conf.AdminPort)))
 		if err != nil {
-			log.Fatal(err)
+			Log(LogLevelError, err)
 		}
 		defer l.Close()
 		for {
 			conn, err := l.Accept()
 			if err != nil {
-				log.Fatal(err)
+				Log(LogLevelError, err)
 			}
 			go handleCommand(conn)
 		}
@@ -46,6 +46,8 @@ func handleCommand(c net.Conn) {
 		case "stats":
 			outBuf := ServerStatsReport()
 			fmt.Fprintln(c, outBuf)
+		case "quit": // close connection
+			return
 		default:
 			fmt.Fprintln(c, "no known command")
 		}

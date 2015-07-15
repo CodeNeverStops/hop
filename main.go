@@ -56,6 +56,7 @@ type Flags struct {
 	WorkerPoolSize uint16
 	LogQueueSize   uint32
 	LogBufferSize  uint16
+	AdminPort      uint16
 }
 
 var (
@@ -132,6 +133,7 @@ func parseFlags() {
 	workerPoolSize := flag.Uint("n", 1000, "max pool size of workers")
 	logQueueSize := flag.Uint("log-queue", 1000, "log queue size")
 	logBufferSize := flag.Uint("log-buffer", 2, "log buffer size")
+	adminPort := flag.Uint("admin-port", 8888, "admin port")
 
 	flag.Parse()
 
@@ -151,6 +153,7 @@ func parseFlags() {
 		WorkerPoolSize: uint16(*workerPoolSize),
 		LogQueueSize:   uint32(*logQueueSize),
 		LogBufferSize:  uint16(*logBufferSize),
+		AdminPort:      uint16(*adminPort),
 	}
 	fmt.Println(conf)
 }
@@ -168,7 +171,7 @@ func postback(url string) {
 	c := time.Tick(time.Duration(conf.RetryInterval) * time.Second)
 	for range c {
 		if times >= conf.RetryTimes {
-			Logf(LevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
+			Logf(LogLevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
 			SendStats(StatsCmdFailedTask)
 			break
 		}
@@ -182,22 +185,23 @@ func postback(url string) {
 }
 
 func sendRequest(url string, times uint8) bool {
-	Logf(LevelInfo, "url:%s,times:%d", url, times)
+	url = ""
+	Logf(LogLevelInfo, "url:%s,times:%d", url, times)
 	resp, err := http.Get(url)
 	if err != nil {
-		Logf(LevelWarning, "failed to send request. detail: url=%s,times=%d", url, times)
+		Logf(LogLevelWarning, "failed to send request. detail: url=%s,times=%d", url, times)
 		return false
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		Logf(LevelWarning, "failed to read response. detail: url=%s,times=%d", url, times)
+		Logf(LogLevelWarning, "failed to read response. detail: url=%s,times=%d", url, times)
 		return false
 	}
 	bodyStr := string(body)
 	if strings.Index(bodyStr, "success=true;") > -1 {
 		return true
 	}
-	Logf(LevelWarning, "failed to send request2. detail: response=%s,url=%s,times=%d", bodyStr, url, times)
+	Logf(LogLevelWarning, "failed to send request2. detail: response=%s,url=%s,times=%d", bodyStr, url, times)
 	return false
 }

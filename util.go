@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func UptimeFormat(secs uint32) string {
+func UptimeFormat(secs uint32, section int) string {
 	timeUnits := map[uint32][2]string{
 		1:     [2]string{"second", "seconds"},
 		60:    [2]string{"minute", "minutes"},
@@ -13,7 +13,13 @@ func UptimeFormat(secs uint32) string {
 		86400: [2]string{"day", "days"},
 	}
 	timeSeq := [4]uint32{86400, 3600, 60, 1}
-	result := make([]string, len(timeSeq))
+	timeSeqLen := len(timeSeq)
+	result := make([]string, timeSeqLen)
+	if section < 1 {
+		section = 1
+	} else if section > timeSeqLen {
+		section = timeSeqLen
+	}
 
 	i := 0
 	for _, index := range timeSeq {
@@ -25,10 +31,14 @@ func UptimeFormat(secs uint32) string {
 				if num > 1 {
 					unit = v[1]
 				}
-				result[i] = fmt.Sprintf("%d%s", num, unit)
+				result[i] = fmt.Sprintf("%d %s", num, unit)
 				i++
 			}
 		}
 	}
-	return strings.Join(result[:i], " ")
+	sliceLen := i
+	if sliceLen > section {
+		sliceLen = section
+	}
+	return strings.Join(result[0:sliceLen], ", ")
 }

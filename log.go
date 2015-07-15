@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	LevelDebug   = "DEBUG"
-	LevelInfo    = "INFO"
-	LevelNotice  = "NOTICE"
-	LevelWarning = "WARNING"
-	LevelError   = "ERROR"
+	LogLevelDebug   = "DEBUG"
+	LogLevelInfo    = "INFO"
+	LogLevelNotice  = "NOTICE"
+	LogLevelWarning = "WARNING"
+	LogLevelError   = "ERROR"
 )
 
 type logData struct {
@@ -54,7 +54,7 @@ func Log(level string, a ...interface{}) {
 
 func writeLog(aLog *logData) {
 	logger.Printf("[%s] %s\n", aLog.level, aLog.message)
-	if aLog.level == LevelError {
+	if aLog.level == LogLevelError {
 		defer func() { os.Exit(1) }()
 		logger.Printf("SHUTDOWN\n")
 	}
