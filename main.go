@@ -70,6 +70,7 @@ func main() {
 	logStart()
 	statsStart()
 	adminStart()
+	workerHub.run()
 
 	var data []string
 	client := NewClient()
