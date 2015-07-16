@@ -11,7 +11,7 @@ func adminStart() {
 	go func() {
 		l, err := net.Listen("tcp", ":"+strconv.Itoa(int(conf.AdminPort)))
 		if err != nil {
-			Log(LogLevelError, err)
+			Log(LogLevelError, err.Error())
 		}
 		defer l.Close()
 		for {
@@ -44,7 +44,7 @@ func handleCommand(c net.Conn) {
 			}
 			break
 		case "stats":
-			outBuf := ServerStatsReport()
+			outBuf := StatsReport()
 			fmt.Fprintln(c, outBuf)
 		case "quit": // close connection
 			return
@@ -56,8 +56,4 @@ func handleCommand(c net.Conn) {
 
 func shutdown() (string, error) {
 	return "shutdown successfully", nil
-}
-
-func ServerStatsReport() string {
-	return StatsReport()
 }
