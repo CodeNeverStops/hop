@@ -1,21 +1,21 @@
 package main
 
 const (
-	HubCmdShutdown = 1 << iota
+	WorkerCmdShutdown = 1 << iota
 )
 
-type conn chan []byte
+type conn chan int
 
 type hub struct {
 	conns      map[conn]bool
-	broadcast  chan []byte
+	broadcast  chan int
 	register   chan conn
 	unregister chan conn
 }
 
 var workerHub = hub{
 	conns:      make(map[conn]bool),
-	broadcast:  make(chan []byte),
+	broadcast:  make(chan int),
 	register:   make(chan conn),
 	unregister: make(chan conn),
 }
@@ -43,7 +43,7 @@ func (h *hub) run() {
 	}()
 }
 
-func (h *hub) Broadcast(cmd []byte) {
+func (h *hub) Broadcast(cmd int) {
 	h.broadcast <- cmd
 }
 

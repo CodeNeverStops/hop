@@ -1,49 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"gopkg.in/redis.v3"
-	"io/ioutil"
-	"net/http"
 	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (
 	Version = "0.1.0"
 )
-
-type Poster interface {
-	Url() string
-}
-
-type Conversion struct {
-	TransId string `json:"trans_id"`
-	UserId  string `json:"uid"`
-}
-
-func (this *Conversion) Url() string {
-	const convTpl string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
-	s := strings.Replace(convTpl, "[trans_id]", this.TransId, 1)
-	s = strings.Replace(s, "[user_id]", this.UserId, 1)
-	return s
-}
-
-type Goal struct {
-	TransId string `json:"trans_id"`
-	GoalId  string `json:"goal_id"`
-}
-
-func (this *Goal) Url() string {
-	const goalTpl string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
-	s := strings.Replace(goalTpl, "[trans_id]", this.TransId, 1)
-	s = strings.Replace(s, "[goal_id]", this.GoalId, 1)
-	return s
-}
 
 type Flags struct {
 	RedisHost      string
@@ -61,8 +27,9 @@ type Flags struct {
 
 var (
 	err    error
-	poster Poster
 	conf   *Flags
+	client *redis.Client
+	pool   chan bool
 )
 
 func main() {
@@ -71,56 +38,18 @@ func main() {
 	statsStart()
 	adminStart()
 	workerHub.run()
-
-	var data []string
-	client := NewClient()
-	pool := make(chan bool, conf.WorkerPoolSize)
+	client = NewClient()
+	pool = make(chan bool, conf.WorkerPoolSize)
 
 	for {
-		pool <- true
-		if data, err = client.BLPop(0, conf.RedisKey).Result(); err != nil {
-			Log("redis blpop failed")
+		task := &Task{}
+		succ, url := task.fetchTask()
+		if !succ {
 			continue
 		}
-		tmpData := data[1]
-		tmpByte := []byte(tmpData)
-		if strings.Index(tmpData, "\"goal_id\":") > -1 {
-			goal := &Goal{}
-			if decodeErr := json.Unmarshal(tmpByte, &goal); decodeErr != nil {
-				Log("decode goal failed")
-				continue
-			}
-			poster = goal
-		} else {
-			conversion := &Conversion{}
-			if decodeErr := json.Unmarshal(tmpByte, &conversion); decodeErr != nil {
-				Log("decode conversion failed")
-				continue
-			}
-			poster = conversion
-		}
-		go func() {
-			SendStats(StatsCmdNewWorker)
-			defer func() {
-				<-pool
-				SendStats(StatsCmdCloseWorker)
-			}()
-			url := poster.Url()
-			postback(url)
-		}()
+		w := NewWorker(url)
+		w.Run()
 	}
-}
-
-func NewClient() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     conf.RedisHost + ":" + strconv.FormatUint(uint64(conf.RedisPort), 10),
-		Password: conf.RedisPWD,
-		DB:       conf.RedisDB,
-	})
-	if _, err := client.Ping().Result(); err != nil {
-		panic("failed to connect redis server")
-	}
-	return client
 }
 
 func parseFlags() {
@@ -157,52 +86,4 @@ func parseFlags() {
 		AdminPort:      uint16(*adminPort),
 	}
 	fmt.Println(conf)
-}
-
-func postback(url string) {
-	var (
-		times uint8 = 0
-		ret   bool
-	)
-	ret = sendRequest(url, times)
-	if ret {
-		SendStats(StatsCmdSuccTask)
-		return
-	}
-	c := time.Tick(time.Duration(conf.RetryInterval) * time.Second)
-	for range c {
-		if times >= conf.RetryTimes {
-			Logf(LogLevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
-			SendStats(StatsCmdFailedTask)
-			break
-		}
-		times++
-		ret = sendRequest(url, times)
-		if ret {
-			SendStats(StatsCmdSuccTask)
-			break
-		}
-	}
-}
-
-func sendRequest(url string, times uint8) bool {
-	url = ""
-	Logf(LogLevelInfo, "url:%s,times:%d", url, times)
-	resp, err := http.Get(url)
-	if err != nil {
-		Logf(LogLevelWarning, "failed to send request. detail: url=%s,times=%d", url, times)
-		return false
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		Logf(LogLevelWarning, "failed to read response. detail: url=%s,times=%d", url, times)
-		return false
-	}
-	bodyStr := string(body)
-	if strings.Index(bodyStr, "success=true;") > -1 {
-		return true
-	}
-	Logf(LogLevelWarning, "failed to send request2. detail: response=%s,url=%s,times=%d", bodyStr, url, times)
-	return false
 }
