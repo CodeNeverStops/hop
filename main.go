@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"gopkg.in/redis.v3"
 	"os"
 )
 
@@ -26,10 +25,11 @@ type Flags struct {
 }
 
 var (
-	err    error
-	conf   *Flags
-	client *redis.Client
-	pool   chan bool
+	conf         *Flags
+	taskQueue    *TaskQueue
+	workerPool   chan bool
+	isShutdown   bool = false
+	shutdownChan      = make(chan bool)
 )
 
 func main() {
@@ -37,17 +37,20 @@ func main() {
 	logStart()
 	statsStart()
 	adminStart()
+	taskQueue = NewTaskQueue()
 	workerHub.run()
-	client = NewClient()
-	pool = make(chan bool, conf.WorkerPoolSize)
+	workerPool = NewWorkerPool()
 
 	for {
-		task := &Task{}
-		succ, url := task.fetchTask()
-		if !succ {
+		if isShutdown {
+			<-shutdownChan
+			return
+		}
+		task, err := NewTask()
+		if err != nil {
 			continue
 		}
-		w := NewWorker(url)
+		w := NewWorker(task)
 		w.Run()
 	}
 }

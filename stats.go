@@ -7,10 +7,9 @@ import (
 )
 
 type ServerStats struct {
-	TaskTotal uint64
-	TaskSucc  uint64
-	TaskFail  uint64
-	//TaskSuccReport map[uint8]uint64
+	TaskTotal  uint64
+	TaskSucc   uint64
+	TaskFail   uint64
 	WorkerCurr uint16
 	WorkerMax  uint16
 	Version    string
@@ -40,6 +39,9 @@ func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 		}
 	case StatsCmdCloseWorker:
 		stats.WorkerCurr--
+		if stats.WorkerCurr == 0 && isShutdown {
+			shutdownChan <- true
+		}
 	case StatsCmdReport:
 		if cmd.replyChan != nil {
 			cmd.replyChan <- stats.Report()
@@ -69,9 +71,15 @@ func (stats *ServerStats) Report() string {
 		workerMaxRatio = float32(stats.WorkerMax) / float32(conf.WorkerPoolSize) * 100
 	}
 
+	status := "online"
+	if isShutdown {
+		status = "closing..."
+	}
+
 	return fmt.Sprintf(`===============================
 Version: %s 
 Uptime: %s
+Status: %s
 Copyright (c) 2015 PerfectWorld
 *******************************
 Task Total:     %d
@@ -83,6 +91,7 @@ Worker Config:  %d
 ===============================`,
 		Version,
 		uptime,
+		status,
 		// task report
 		stats.TaskTotal,
 		stats.TaskSucc, taskSuccRatio,

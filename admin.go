@@ -38,10 +38,8 @@ func handleCommand(c net.Conn) {
 		cmd := string(inBuf[:n-2])
 		switch cmd {
 		case "shutdown":
-			_, err = shutdown()
-			if err != nil {
-				fmt.Fprintln(c, "shutdown server failed")
-			}
+			ShutdownServer()
+			fmt.Fprintln(c, "shutdown server now ...")
 			break
 		case "stats":
 			outBuf := StatsReport()
@@ -49,11 +47,12 @@ func handleCommand(c net.Conn) {
 		case "quit": // close connection
 			return
 		default:
-			fmt.Fprintln(c, "no known command")
+			fmt.Fprintln(c, "unknown command")
 		}
 	}
 }
 
-func shutdown() (string, error) {
-	return "shutdown successfully", nil
+func ShutdownServer() {
+	isShutdown = true
+	workerHub.Broadcast(WorkerCmdShutdown)
 }

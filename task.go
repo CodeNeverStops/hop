@@ -2,8 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"gopkg.in/redis.v3"
-	"strconv"
+	"errors"
 	"strings"
 )
 
@@ -12,11 +11,30 @@ type Conversion struct {
 	UserId  string `json:"uid"`
 }
 
+type Poster interface {
+	Tpl() string
+	Url() string
+	Json() (string, error)
+}
+
+func (this *Conversion) Tpl() string {
+	return "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
+}
+
 func (this *Conversion) Url() string {
-	const convTpl string = "http://arcgames.go2cloud.org/aff_lsr?transaction_id=[trans_id]&adv_sub=[user_id]"
-	s := strings.Replace(convTpl, "[trans_id]", this.TransId, 1)
+	tpl := this.Tpl()
+	s := strings.Replace(tpl, "[trans_id]", this.TransId, 1)
 	s = strings.Replace(s, "[user_id]", this.UserId, 1)
 	return s
+}
+
+func (this *Conversion) Json() (string, error) {
+	ret, err := json.Marshal(*this)
+	if err != nil {
+		Logf("encode conversion failed. detail: %s", err.Error())
+		return "", errEncodeConversionFailed
+	}
+	return string(ret), nil
 }
 
 type Goal struct {
@@ -24,56 +42,82 @@ type Goal struct {
 	GoalId  string `json:"goal_id"`
 }
 
+func (this *Goal) Tpl() string {
+	return "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
+}
+
 func (this *Goal) Url() string {
-	const goalTpl string = "http://arcgames.go2cloud.org/aff_goal?a=lsr&transaction_id=[trans_id]&goal_id=[goal_id]"
-	s := strings.Replace(goalTpl, "[trans_id]", this.TransId, 1)
+	tpl := this.Tpl()
+	s := strings.Replace(tpl, "[trans_id]", this.TransId, 1)
 	s = strings.Replace(s, "[goal_id]", this.GoalId, 1)
 	return s
 }
 
+func (this *Goal) Json() (string, error) {
+	ret, err := json.Marshal(*this)
+	if err != nil {
+		Logf("encode goal failed. detail: %s", err.Error())
+		return "", errEncodeGoalFailed
+	}
+	return string(ret), nil
+}
+
+func NewWorkerPool() chan bool {
+	return make(chan bool, conf.WorkerPoolSize)
+}
+
 type Task struct {
-	url string
+	TaskPoster Poster
+	TaskType   uint8
 }
 
-func NewClient() *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr:     conf.RedisHost + ":" + strconv.FormatUint(uint64(conf.RedisPort), 10),
-		Password: conf.RedisPWD,
-		DB:       conf.RedisDB,
-	})
-	if _, err := client.Ping().Result(); err != nil {
-		panic("failed to connect redis server")
-	}
-	return client
-}
+const (
+	TaskTypeConversion = 1
+	TaskTypeGoal       = 2
+)
 
-func (t *Task) fetchTask() (bool, string) {
-	var data []string
-	var url string
-	if data, err = client.BLPop(0, conf.RedisKey).Result(); err != nil {
-		Log("redis blpop failed")
-		return false, ""
+var (
+	errEncodeGoalFailed       = errors.New("task: encode goal failed")
+	errDecodeGoalFailed       = errors.New("task: decode goal failed")
+	errEncodeConversionFailed = errors.New("task: encode conversion failed")
+	errDecodeConversionFailed = errors.New("task: decode conversion failed")
+)
+
+func NewTask() (*Task, error) {
+	var (
+		poster   Poster
+		taskType uint8
+	)
+	data, err := taskQueue.LPop()
+	if err != nil {
+		return nil, err
 	}
-	tmpData := data[1]
-	tmpByte := []byte(tmpData)
-	if strings.Index(tmpData, "\"goal_id\":") > -1 {
+	tmpByte := []byte(data)
+	if strings.Index(data, "\"goal_id\":") > -1 {
 		goal := &Goal{}
 		if decodeErr := json.Unmarshal(tmpByte, &goal); decodeErr != nil {
 			Log("decode goal failed")
-			return false, ""
+			return nil, errDecodeGoalFailed
 		}
-		url = goal.Url()
+		poster = goal
+		taskType = TaskTypeGoal
 	} else {
 		conversion := &Conversion{}
 		if decodeErr := json.Unmarshal(tmpByte, &conversion); decodeErr != nil {
 			Log("decode conversion failed")
-			return false, ""
+			return nil, errDecodeConversionFailed
 		}
-		url = conversion.Url()
+		poster = conversion
+		taskType = TaskTypeConversion
 	}
-	return true, url
+	return &Task{poster, taskType}, nil
 }
 
-func (t *Task) saveTask() {
-
+func (t *Task) SaveTask() error {
+	data, err := t.TaskPoster.Json()
+	if err != nil {
+		return err
+	}
+	err = taskQueue.LPush(data)
+	return err
 }

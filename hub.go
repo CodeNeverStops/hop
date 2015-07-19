@@ -28,6 +28,7 @@ func (h *hub) run() {
 				h.conns[c] = true
 			case c := <-h.unregister:
 				if _, ok := h.conns[c]; ok {
+					close(c)
 					delete(h.conns, c)
 				}
 			case m := <-h.broadcast: // broadcast to workers
@@ -35,6 +36,7 @@ func (h *hub) run() {
 					select {
 					case c <- m:
 					default:
+						close(c)
 						delete(h.conns, c)
 					}
 				}
