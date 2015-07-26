@@ -42,6 +42,7 @@ func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 		}
 	case StatsCmdCloseWorker:
 		stats.WorkerCurr--
+		Log(LogLevelInfo, stats.WorkerCurr)
 		if stats.WorkerCurr == 0 && isShutdown {
 			shutdownChan <- true
 		}

@@ -38,11 +38,12 @@ func handleCommand(c net.Conn) {
 			continue
 		}
 		cmd := string(inBuf[:n-2])
+		Logf(LogLevelInfo, "admin command: %s", cmd)
 		switch cmd {
 		case "shutdown":
 			ShutdownServer()
 			fmt.Fprintln(c, "shutdown server now ...")
-			break
+			return
 		case "stats":
 			outBuf := StatsReport()
 			fmt.Fprintln(c, outBuf)

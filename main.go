@@ -35,7 +35,7 @@ var (
 	// the global worker pool
 	workerPool chan bool
 
-	// a flag use to store status of shutdown
+	// a flag use to store status of server shutdown
 	isShutdown bool = false
 
 	// a channel use to send shutdown command
@@ -53,7 +53,10 @@ func main() {
 
 	for {
 		if isShutdown {
+			Log(LogLevelInfo, "wait shutdown")
 			<-shutdownChan
+			Log(LogLevelInfo, "receive shutdown")
+			FlushLog()
 			return
 		}
 		task, err := NewTask()

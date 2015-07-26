@@ -46,34 +46,35 @@ func (w *Worker) postback() {
 		return
 	}
 	// We will start a time ticker to send requests if the above request is failed.
-	c := time.Tick(time.Duration(conf.RetryInterval) * time.Second)
+	c := time.After(time.Duration(conf.RetryInterval) * time.Second)
 	for {
 		select {
 		case cmd := <-w.msgInbox:
-			if shutdown := w.handleCommand(cmd); shutdown {
-				break
+			if workerShutdown := w.handleCommand(cmd); workerShutdown {
+				return
 			}
 		case <-c:
 			// We will give it up if retry times beyond the max.
 			if times >= conf.RetryTimes {
-				url := w.task.Url()
+				url := w.taskUrl()
 				Logf(LogLevelWarning, "reach max times. throw it away. detail: url=%s,times=%d", url, times)
 				SendStats(StatsCmdFailedTask)
-				break
+				return
 			}
 			times++
 			ret = w.sendRequest(times)
 			if ret {
 				SendStats(StatsCmdSuccTask)
-				break
+				return
 			}
+			c = time.After(time.Duration(conf.RetryInterval) * time.Second)
 		}
 	}
 }
 
 // Send a http request
 func (w *Worker) sendRequest(times uint8) bool {
-	url := w.task.Url()
+	url := w.taskUrl()
 	resp, err := http.Get(url)
 	if err != nil {
 		Logf(LogLevelWarning, "failed to send request. detail: url=%s,times=%d", url, times)
@@ -93,16 +94,26 @@ func (w *Worker) sendRequest(times uint8) bool {
 	return false
 }
 
-func (w *Worker) handleCommand(cmd int) (shutdown bool) {
+func (w *Worker) handleCommand(cmd int) (workerShutdown bool) {
 	switch cmd {
 	case WorkerCmdShutdown:
-		w.task.SaveTask()
-		shutdown = true
+		Log(LogLevelInfo, "worker shutdown")
+		w.saveTask()
+		Log(LogLevelInfo, "worker saved task")
+		workerShutdown = true
 	default:
 		Logf(LogLevelWarning, "unknown command: %d", cmd)
-		shutdown = false
+		workerShutdown = false
 	}
 	return
+}
+
+func (w *Worker) saveTask() {
+	w.task.SaveTask()
+}
+
+func (w *Worker) taskUrl() string {
+	return w.task.Url()
 }
 
 // Create a new worker
@@ -112,6 +123,7 @@ func NewWorker(task *Task) *Worker {
 		make(inbox),
 	}
 	workerHub.Register(w.msgInbox)
+	Log(LogLevelInfo, "new worker")
 	return w
 }
 

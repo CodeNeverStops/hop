@@ -66,8 +66,12 @@ func writeLog(aLog *logData) {
 	}
 	currBufferSize++
 	if currBufferSize >= conf.LogBufferSize {
-		log.Print(&buf)
-		buf.Reset()
-		currBufferSize = 0
+		FlushLog()
 	}
+}
+
+func FlushLog() {
+	log.Print(&buf)
+	buf.Reset()
+	currBufferSize = 0
 }
