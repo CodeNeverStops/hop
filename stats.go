@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// A type use to store server status
 type ServerStats struct {
 	TaskTotal  uint64
 	TaskSucc   uint64
@@ -16,6 +17,7 @@ type ServerStats struct {
 	StartTime  time.Time
 }
 
+// Define status command
 const (
 	StatsCmdSuccTask = iota
 	StatsCmdFailedTask
@@ -24,6 +26,7 @@ const (
 	StatsCmdReport
 )
 
+// Status server handle status commands
 func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 	switch cmd.cmd {
 	case StatsCmdSuccTask:
@@ -53,6 +56,7 @@ func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 	return nil
 }
 
+// Show status report
 func (stats *ServerStats) Report() string {
 	uptime := UptimeFormat(uint32(time.Now().Sub(stats.StartTime)/time.Second), 2)
 	var (
@@ -103,14 +107,19 @@ Worker Config:  %d
 	)
 }
 
+// A channel use to transfer status command
 var statsChannel chan statsCmd
+
+// the global status server
 var stats *ServerStats
 
+// A type use to store status command
 type statsCmd struct {
 	cmd       int
 	replyChan chan string
 }
 
+// Start status server to collect status of the server
 func statsStart() {
 	// init server status
 	stats = &ServerStats{
@@ -132,8 +141,11 @@ func statsStart() {
 	}(stats)
 }
 
+// Send status command to status server
 func SendStats(cmdCode int) (replyChan chan string) {
 	var cmd statsCmd
+	// only report command returns result
+	// others commands have no result, so they don't need reply channel
 	if cmdCode == StatsCmdReport {
 		replyChan = make(chan string)
 	} else {

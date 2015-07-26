@@ -10,6 +10,7 @@ const (
 	Version = "0.1.0"
 )
 
+// Define a type to store command options
 type Flags struct {
 	RedisHost      string
 	RedisPort      uint16
@@ -25,11 +26,20 @@ type Flags struct {
 }
 
 var (
-	conf         *Flags
-	taskQueue    *TaskQueue
-	workerPool   chan bool
-	isShutdown   bool = false
-	shutdownChan      = make(chan bool)
+	// the global config
+	conf *Flags
+
+	// the global task queue
+	taskQueue *TaskQueue
+
+	// the global worker pool
+	workerPool chan bool
+
+	// a flag use to store status of shutdown
+	isShutdown bool = false
+
+	// a channel use to send shutdown command
+	shutdownChan = make(chan bool)
 )
 
 func main() {

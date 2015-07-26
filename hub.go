@@ -1,25 +1,37 @@
 package main
 
+// Defined some commands to manage workers.
 const (
 	WorkerCmdShutdown = 1 << iota
 )
 
-type conn chan int
+// Define inbox type of workers.
+type inbox chan int
 
+// A hub collects inbox of all workers.
 type hub struct {
-	conns      map[conn]bool
-	broadcast  chan int
-	register   chan conn
-	unregister chan conn
+	// a map of inbox of all workers
+	conns map[inbox]bool
+
+	// a channel use to receive command, and then broadcast the command to all inbox
+	broadcast chan int
+
+	// a channel use to register inbox of worker
+	register chan inbox
+
+	// a channel use to unregister inbox of worker
+	unregister chan inbox
 }
 
 var workerHub = hub{
-	conns:      make(map[conn]bool),
+	conns:      make(map[inbox]bool),
 	broadcast:  make(chan int),
-	register:   make(chan conn),
-	unregister: make(chan conn),
+	register:   make(chan inbox),
+	unregister: make(chan inbox),
 }
 
+// Start the hub server,
+// create a new goroutine to handle requests
 func (h *hub) run() {
 	go func() {
 		for {
@@ -49,10 +61,10 @@ func (h *hub) Broadcast(cmd int) {
 	h.broadcast <- cmd
 }
 
-func (h *hub) Register(c conn) {
+func (h *hub) Register(c inbox) {
 	h.register <- c
 }
 
-func (h *hub) Unregister(c conn) {
+func (h *hub) Unregister(c inbox) {
 	h.unregister <- c
 }

@@ -7,6 +7,8 @@ import (
 	"strconv"
 )
 
+// Start admin server.
+// Handle admin commands by TCP protocol.
 func adminStart() {
 	go func() {
 		l, err := net.Listen("tcp", ":"+strconv.Itoa(int(conf.AdminPort)))
