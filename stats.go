@@ -13,6 +13,7 @@ type ServerStats struct {
 	TaskFail   uint64
 	WorkerCurr uint16
 	WorkerMax  uint16
+	IsShutdown bool
 	Version    string
 	StartTime  time.Time
 }
@@ -24,10 +25,18 @@ const (
 	StatsCmdNewWorker
 	StatsCmdCloseWorker
 	StatsCmdReport
+	StatsCmdIsShutdown
+	StatsCmdShutdown
+)
+
+const (
+	ShutdownYes = "1"
+	ShutdownNo  = "0"
 )
 
 // Status server handle status commands
 func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
+	Logf(LogLevelInfo, "stats command: %d", cmd.cmd)
 	switch cmd.cmd {
 	case StatsCmdSuccTask:
 		stats.TaskTotal++
@@ -42,16 +51,26 @@ func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 		}
 	case StatsCmdCloseWorker:
 		stats.WorkerCurr--
-		Log(LogLevelInfo, stats.WorkerCurr)
-		if stats.WorkerCurr == 0 && isShutdown {
-			shutdownChan <- true
+		Logf(LogLevelInfo, "worker curr: %d", stats.WorkerCurr)
+		if stats.WorkerCurr == 0 && stats.IsShutdown {
+			shutdownCompChan <- true
 		}
 	case StatsCmdReport:
-		if cmd.replyChan != nil {
-			cmd.replyChan <- stats.Report()
+		cmd.replyChan <- stats.Report()
+	case StatsCmdShutdown:
+		Log(LogLevelInfo, "set shutdown to YES")
+		stats.IsShutdown = true
+	case StatsCmdIsShutdown:
+		var reply string
+		if stats.IsShutdown {
+			reply = ShutdownYes
+		} else {
+			reply = ShutdownNo
 		}
+		Logf(LogLevelInfo, "is shutdown: %s", reply)
+		cmd.replyChan <- reply
 	default:
-		Log(LogLevelWarning, "[stat server] command not found. command: %s", cmd)
+		Log(LogLevelWarning, "[stats server] command not found. command: %s", cmd)
 		return errors.New("command not found")
 	}
 	return nil
@@ -77,7 +96,7 @@ func (stats *ServerStats) Report() string {
 	}
 
 	status := "online"
-	if isShutdown {
+	if stats.IsShutdown {
 		status = "closing..."
 	}
 
@@ -124,8 +143,9 @@ type statsCmd struct {
 func statsStart() {
 	// init server status
 	stats = &ServerStats{
-		Version:   Version,
-		StartTime: time.Now(),
+		IsShutdown: false,
+		Version:    Version,
+		StartTime:  time.Now(),
 	}
 	poolSize := conf.WorkerPoolSize / 10
 	if poolSize < 1 {
@@ -147,19 +167,26 @@ func SendStats(cmdCode int) (replyChan chan string) {
 	var cmd statsCmd
 	// only report command returns result
 	// others commands have no result, so they don't need reply channel
-	if cmdCode == StatsCmdReport {
+	switch cmdCode {
+	case StatsCmdReport, StatsCmdIsShutdown:
 		replyChan = make(chan string)
-	} else {
+	default:
 		replyChan = nil
 	}
 	cmd = statsCmd{cmdCode, replyChan}
-	go func() {
-		statsChannel <- cmd
-	}()
+	statsChannel <- cmd
 	return
 }
 
 func StatsReport() string {
 	replyChan := SendStats(StatsCmdReport)
 	return <-replyChan
+}
+
+func IsShutdown() bool {
+	replyChan := SendStats(StatsCmdIsShutdown)
+	if isShutdown := <-replyChan; isShutdown == ShutdownYes {
+		return true
+	}
+	return false
 }

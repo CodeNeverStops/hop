@@ -2,7 +2,7 @@ package main
 
 // Defined some commands to manage workers.
 const (
-	WorkerCmdShutdown = 1 << iota
+	WorkerCmdShutdown = 1
 )
 
 // Define inbox type of workers.
@@ -58,6 +58,7 @@ func (h *hub) run() {
 }
 
 func (h *hub) Broadcast(cmd int) {
+	Logf(LogLevelInfo, "[hub] broadcast command: %d", cmd)
 	h.broadcast <- cmd
 }
 

@@ -50,12 +50,14 @@ func handleCommand(c net.Conn) {
 		case "quit": // close connection
 			return
 		default:
-			fmt.Fprintln(c, "unknown command")
+			fmt.Fprintln(c, "unknown admin command: %s", cmd)
 		}
 	}
 }
 
 func ShutdownServer() {
-	isShutdown = true
+	SendStats(StatsCmdShutdown)
+	// wait for server go into shutdown status, stop create new task
+	<-shutdownStartChan
 	workerHub.Broadcast(WorkerCmdShutdown)
 }

@@ -46,14 +46,15 @@ func (w *Worker) postback() {
 		return
 	}
 	// We will start a time ticker to send requests if the above request is failed.
-	c := time.After(time.Duration(conf.RetryInterval) * time.Second)
+	t := time.NewTimer(time.Duration(conf.RetryInterval) * time.Second)
 	for {
 		select {
 		case cmd := <-w.msgInbox:
 			if workerShutdown := w.handleCommand(cmd); workerShutdown {
+				t.Stop()
 				return
 			}
-		case <-c:
+		case <-t.C:
 			// We will give it up if retry times beyond the max.
 			if times >= conf.RetryTimes {
 				url := w.taskUrl()
@@ -67,7 +68,7 @@ func (w *Worker) postback() {
 				SendStats(StatsCmdSuccTask)
 				return
 			}
-			c = time.After(time.Duration(conf.RetryInterval) * time.Second)
+			t = time.NewTimer(time.Duration(conf.RetryInterval) * time.Second)
 		}
 	}
 }
@@ -95,14 +96,15 @@ func (w *Worker) sendRequest(times uint8) bool {
 }
 
 func (w *Worker) handleCommand(cmd int) (workerShutdown bool) {
+	//Logf(LogLevelInfo, "[worker] command: %d", cmd)
 	switch cmd {
 	case WorkerCmdShutdown:
-		Log(LogLevelInfo, "worker shutdown")
+		Log(LogLevelInfo, "[worker] begin to shutdown")
 		w.saveTask()
-		Log(LogLevelInfo, "worker saved task")
+		Log(LogLevelInfo, "[worker] saved task")
 		workerShutdown = true
 	default:
-		Logf(LogLevelWarning, "unknown command: %d", cmd)
+		//Logf(LogLevelWarning, "[worker] unknown command: %d", cmd)
 		workerShutdown = false
 	}
 	return
