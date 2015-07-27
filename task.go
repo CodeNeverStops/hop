@@ -97,7 +97,9 @@ func NewTask() (*Task, error) {
 		poster   Poster
 		taskType uint8
 	)
+	Log(LogLevelInfo, "get task start")
 	data, err := taskQueue.LPop()
+	Log(LogLevelInfo, "get task done")
 	if err != nil {
 		return nil, err
 	}

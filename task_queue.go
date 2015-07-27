@@ -4,6 +4,7 @@ import (
 	"errors"
 	"gopkg.in/redis.v3"
 	"strconv"
+	"time"
 )
 
 // Task queue used to fetch task from redis list
@@ -32,7 +33,7 @@ func NewTaskQueue() *TaskQueue {
 }
 
 func (queue *TaskQueue) LPop() (string, error) {
-	data, err := queue.client.BLPop(0, conf.RedisKey).Result()
+	data, err := queue.client.BLPop(5*time.Second, conf.RedisKey).Result()
 	if err != nil {
 		Log(LogLevelWarning, errLPopFailed.Error()+"detail:"+err.Error())
 		return "", errLPopFailed

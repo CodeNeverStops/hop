@@ -12,17 +12,19 @@ const (
 
 // Define a type to store command options
 type Flags struct {
-	RedisHost      string
-	RedisPort      uint16
-	RedisDB        int64
-	RedisPWD       string
-	RedisKey       string
-	RetryTimes     uint8
-	RetryInterval  uint16
-	WorkerPoolSize uint16
-	LogQueueSize   uint32
-	LogBufferSize  uint16
-	AdminPort      uint16
+	RedisHost        string
+	RedisPort        uint16
+	RedisDB          int64
+	RedisPWD         string
+	RedisKey         string
+	RetryTimes       uint8
+	RetryInterval    uint16
+	WorkerPoolSize   uint16
+	LogQueueSize     uint32
+	LogBufferSize    uint16
+	AdminPort        uint16
+	TaskFetchTimeout uint16
+	LogLevel         LogLevel
 }
 
 var (
@@ -58,7 +60,6 @@ func main() {
 			// ready for shutdown
 			shutdownStartChan <- true
 			// wait for workers shutdown
-
 			Log(LogLevelInfo, "shutdown done")
 			<-shutdownCompChan
 			FlushLog()
@@ -85,6 +86,10 @@ func parseFlags() {
 	logQueueSize := flag.Uint("log-queue", 1000, "log queue size")
 	logBufferSize := flag.Uint("log-buffer", 2, "log buffer size")
 	adminPort := flag.Uint("admin-port", 8888, "admin port")
+	fetchTaskTimeout := flag.Uint("fetch-timeout", 10, "timeout to fetch a task")
+	v := flag.Bool("v", true, "log level 1")
+	vv := flag.Bool("vv", false, "log level 2")
+	vvv := flag.Bool("vvv", false, "log level 3")
 
 	flag.Parse()
 
@@ -93,18 +98,36 @@ func parseFlags() {
 		os.Exit(1)
 	}
 
+	// default log level is 1
+	if !*v && !*vv && !*vvv {
+		*v = true
+	}
+
+	var logLevel LogLevel
+	if *v {
+		logLevel = LogLevelWarning
+	}
+	if *vv {
+		logLevel = LogLevelInfo
+	}
+	if *vvv {
+		logLevel = LogLevelDebug
+	}
+
 	conf = &Flags{
-		RedisHost:      *redisHost,
-		RedisPort:      uint16(*redisPort),
-		RedisDB:        int64(*redisDB),
-		RedisPWD:       *redisPWD,
-		RedisKey:       *redisKey,
-		RetryTimes:     uint8(*retryTimes),
-		RetryInterval:  uint16(*retryInterval),
-		WorkerPoolSize: uint16(*workerPoolSize),
-		LogQueueSize:   uint32(*logQueueSize),
-		LogBufferSize:  uint16(*logBufferSize),
-		AdminPort:      uint16(*adminPort),
+		RedisHost:        *redisHost,
+		RedisPort:        uint16(*redisPort),
+		RedisDB:          int64(*redisDB),
+		RedisPWD:         *redisPWD,
+		RedisKey:         *redisKey,
+		RetryTimes:       uint8(*retryTimes),
+		RetryInterval:    uint16(*retryInterval),
+		WorkerPoolSize:   uint16(*workerPoolSize),
+		LogQueueSize:     uint32(*logQueueSize),
+		LogBufferSize:    uint16(*logBufferSize),
+		AdminPort:        uint16(*adminPort),
+		TaskFetchTimeout: uint16(*fetchTaskTimeout),
+		LogLevel:         logLevel,
 	}
 	fmt.Println(conf)
 }

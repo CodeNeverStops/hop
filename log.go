@@ -9,16 +9,34 @@ import (
 
 // defined log levels
 const (
-	LogLevelDebug   = "DEBUG"
-	LogLevelInfo    = "INFO"
-	LogLevelNotice  = "NOTICE"
-	LogLevelWarning = "WARNING"
-	LogLevelError   = "ERROR"
+	LogLevelDebug = iota
+	LogLevelInfo
+	LogLevelNotice
+	LogLevelWarning
+	LogLevelError
 )
 
+type LogLevel uint8
+
 type logData struct {
+	level   LogLevel
 	message string
-	level   string
+}
+
+func (this *logData) LevelString() (ret string) {
+	switch this.level {
+	case LogLevelDebug:
+		ret = "DEBUG"
+	case LogLevelInfo:
+		ret = "INFO"
+	case LogLevelNotice:
+		ret = "NOTICE"
+	case LogLevelWarning:
+		ret = "WARNING"
+	case LogLevelError:
+		ret = "ERROR"
+	}
+	return
 }
 
 var (
@@ -45,21 +63,27 @@ func logStart() {
 	}()
 }
 
-func Logf(level string, format string, a ...interface{}) {
+func Logf(level LogLevel, format string, a ...interface{}) {
+	if level < conf.LogLevel {
+		return
+	}
 	message := fmt.Sprintf(format, a...)
-	aLog := &logData{message, level}
+	aLog := &logData{level, message}
 	logChannel <- aLog
 }
 
-func Log(level string, a ...interface{}) {
+func Log(level LogLevel, a ...interface{}) {
+	if level < conf.LogLevel {
+		return
+	}
 	message := fmt.Sprint(a...)
-	aLog := &logData{message, level}
+	aLog := &logData{level, message}
 	logChannel <- aLog
 }
 
 // Write logs to buffer. Flush logs to stdout if buffer size reach the configured size.
 func writeLog(aLog *logData) {
-	logger.Printf("[%s] %s\n", aLog.level, aLog.message)
+	logger.Printf("[%s] %s\n", aLog.LevelString(), aLog.message)
 	if aLog.level == LogLevelError {
 		defer func() { os.Exit(1) }()
 		logger.Printf("SHUTDOWN\n")

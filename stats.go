@@ -53,7 +53,9 @@ func (stats *ServerStats) HandleCommand(cmd statsCmd) error {
 		stats.WorkerCurr--
 		Logf(LogLevelInfo, "worker curr: %d", stats.WorkerCurr)
 		if stats.WorkerCurr == 0 && stats.IsShutdown {
+			Log(LogLevelInfo, "stats shutdown send complete message start")
 			shutdownCompChan <- true
+			Log(LogLevelInfo, "stats shutdown send complete message end")
 		}
 	case StatsCmdReport:
 		cmd.replyChan <- stats.Report()

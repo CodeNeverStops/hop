@@ -51,7 +51,9 @@ func (w *Worker) postback() {
 		select {
 		case cmd := <-w.msgInbox:
 			if workerShutdown := w.handleCommand(cmd); workerShutdown {
+				Log(LogLevelInfo, "worker timer begin to stop")
 				t.Stop()
+				Log(LogLevelInfo, "worker timer stopped")
 				return
 			}
 		case <-t.C:
