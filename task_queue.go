@@ -35,7 +35,7 @@ func NewTaskQueue() *TaskQueue {
 func (queue *TaskQueue) LPop() (string, error) {
 	data, err := queue.client.BLPop(5*time.Second, conf.RedisKey).Result()
 	if err != nil {
-		Log(LogLevelWarning, errLPopFailed.Error()+"detail:"+err.Error())
+		Log(LogLevelNotice, errLPopFailed.Error()+"detail:"+err.Error())
 		return "", errLPopFailed
 	}
 	tmpData := data[1]
