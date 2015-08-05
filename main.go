@@ -59,10 +59,13 @@ func main() {
 			Log(LogLevelInfo, "shutdown...")
 			// ready for shutdown
 			shutdownStartChan <- true
-			// wait for workers shutdown
+			if stats.WorkerCurr > 0 {
+				// wait for workers shutdown
+				<-shutdownCompChan
+			}
 			Log(LogLevelInfo, "shutdown done")
-			<-shutdownCompChan
 			FlushLog()
+			Log(LogLevelInfo, "flush log done")
 			return
 		}
 		task, err := NewTask()
