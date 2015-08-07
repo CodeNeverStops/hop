@@ -50,7 +50,7 @@ func handleCommand(c net.Conn) {
 		case "quit": // close connection
 			return
 		default:
-			fmt.Fprintln(c, "unknown admin command: %s", cmd)
+			fmt.Fprintf(c, "unknown admin command: %s\n", cmd)
 		}
 	}
 }
