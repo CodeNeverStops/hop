@@ -24,3 +24,44 @@ Usage of ./hoff_postback:
 
 ### Run
 ./hoff_postback -fetch-timeout=30 -i=300 -n=1000 -redis-db=0 -redis-host=127.0.0.1 -redis-key=hoff:postback:go
+
+### Admin commands
+Telnet to the server and use commands:
+telnet 127.0.0.1 $admin-port (default: 8888)
+
+#### Stats
+Check the server status
+```
+stats
+```
+```
+===============================
+Version: 0.1.0
+Uptime: 3 hours, 1 minute
+Status: online
+Copyright (c) 2015 PerfectWorld
+*******************************
+Task Total:     357
+  Task Success:   348 (97.48%)
+  Task Failed:    9 (2.52%)
+Worker Config:  1000
+  Worker Current: 1 (0.10%)
+  Worker Max:     22 (2.20%)
+===============================
+```
+
+#### Shutdown
+Will shutdown the server safely.
+```
+shutdown
+```
+
+#### Quit
+Quit the telnet connection
+```
+quit
+```
+
+
+
+
