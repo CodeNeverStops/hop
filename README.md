@@ -2,7 +2,9 @@
 A go program is used to post back tracking data to HasOffers.
 
 ### Usage
+```
 ./hoff_postback -h
+```
 ```
 Usage of ./hoff_postback:
 -admin-port=8888: admin port                // Manages server's port, default port is: 8888
@@ -23,16 +25,20 @@ Usage of ./hoff_postback:
 ```
 
 ### Run
+```
 ./hoff_postback -fetch-timeout=30 -i=300 -n=1000 -redis-db=0 -redis-host=127.0.0.1 -redis-key=hoff:postback:go
+```
 
 ### Admin commands
 Telnet to the server and use commands:
-telnet 127.0.0.1 $admin-port (default: 8888)
+```
+telnet 127.0.0.1 8888 (default: 8888)
+```
 
-#### Stats
+##### Stats
 Check the server status
 ```
-stats
+>stats
 ```
 ```
 ===============================
@@ -50,16 +56,16 @@ Worker Config:  1000
 ===============================
 ```
 
-#### Shutdown
+##### Shutdown
 Will shutdown the server safely.
 ```
-shutdown
+>shutdown
 ```
 
-#### Quit
+##### Quit
 Quit the telnet connection
 ```
-quit
+>quit
 ```
 
 
